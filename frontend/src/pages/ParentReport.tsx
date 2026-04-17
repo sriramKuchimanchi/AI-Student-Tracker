@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer, GraduationCap, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Printer } from 'lucide-react';
 import api from '../api';
 import { ParentReport as ParentReportType, PerformanceRow } from '../types';
 
-const getGrade = (pct: number): string => {
+const getSubjectGrade = (pct: number): string => {
   if (pct >= 85) return 'A+';
   if (pct >= 70) return 'A';
   if (pct >= 55) return 'B';
@@ -13,10 +13,16 @@ const getGrade = (pct: number): string => {
 };
 
 const gradeColor = (grade: string): string => {
-  if (grade === 'A+' || grade === 'A') return 'text-green-600';
-  if (grade === 'B') return 'text-brand-600';
-  if (grade === 'C') return 'text-amber-600';
-  return 'text-red-600';
+  if (grade === 'A+' || grade === 'A') return '#16a34a';
+  if (grade === 'B') return '#2563eb';
+  if (grade === 'C') return '#d97706';
+  return '#dc2626';
+};
+
+const pctBarColor = (pct: number): string => {
+  if (pct >= 70) return '#22c55e';
+  if (pct >= 40) return '#f59e0b';
+  return '#ef4444';
 };
 
 export default function ParentReport() {
@@ -35,184 +41,222 @@ export default function ParentReport() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '16rem' }}>
+        <div className="spinner" />
       </div>
     );
   }
 
   if (!report) {
-    return <div className="text-center text-slate-400 mt-20">Report not found</div>;
+    return <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '5rem' }}>Report not found</p>;
   }
 
   const { student, performance, summary } = report;
-  const overallGrade = getGrade(parseFloat(summary.total_average));
   const exams = [...new Set(report.marks.map(m => m.exam_name))];
+  const overallGrade = summary.grade;
+  const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8 print:hidden">
-        <button onClick={() => navigate(`/performance/${studentId}`)} className="btn-secondary py-2 px-3">
+      <div className="print:hidden" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
+        <button onClick={() => navigate(`/performance/${studentId}`)} className="btn-secondary" style={{ padding: '0.5rem 0.75rem' }}>
           <ArrowLeft size={14} />
         </button>
-        <div className="flex-1">
+        <div style={{ flex: 1 }}>
           <h1 className="page-header">Parent Progress Report</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Shareable progress summary for parents/guardians</p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.125rem' }}>Shareable progress summary for parents / guardians</p>
         </div>
         <button onClick={() => window.print()} className="btn-primary">
           <Printer size={14} /> Print / Save PDF
         </button>
       </div>
 
-      <div className="card p-10 max-w-3xl mx-auto" id="report">
-        <div className="flex items-start justify-between mb-8 pb-6 border-b border-surface-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center">
-              <GraduationCap size={22} className="text-white" />
-            </div>
+      <div id="report" style={{ maxWidth: '720px', margin: '0 auto', background: '#fff', borderRadius: '1rem', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
+
+        <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3d74f5 100%)', padding: '2rem 2.5rem', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <p className="font-display font-bold text-brand-600 text-lg leading-none">EduTrack</p>
-              <p className="text-xs text-slate-400 mt-1">AI Student Progress Tracker</p>
+              <p style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, fontSize: '1.4rem', letterSpacing: '-0.02em' }}>EduTrack</p>
+              <p style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '0.2rem' }}>AI Student Progress Tracker</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '0.65rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Progress Report</p>
+              <p style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{date}</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Progress Report</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-            </p>
+
+          <div style={{ marginTop: '1.75rem', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '0.65rem', opacity: 0.65, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Student</p>
+              <p style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, fontSize: '1.5rem', marginTop: '0.2rem' }}>{student.name}</p>
+              <p style={{ fontSize: '0.8rem', opacity: 0.75, marginTop: '0.2rem' }}>
+                Roll No: {student.roll_number} &nbsp;·&nbsp; {student.class}{student.section ? ` — ${student.section}` : ''}
+              </p>
+            </div>
+            <div style={{
+              background: 'rgba(255,255,255,0.15)', borderRadius: '1rem', padding: '1rem 1.5rem', textAlign: 'center', backdropFilter: 'blur(8px)',
+            }}>
+              <p style={{ fontSize: '0.65rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Overall Grade</p>
+              <p style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, fontSize: '2.5rem', lineHeight: 1, marginTop: '0.3rem',
+                color: overallGrade === 'F' ? '#fca5a5' : overallGrade === 'C' ? '#fde68a' : '#bbf7d0' }}>
+                {overallGrade}
+              </p>
+              <p style={{ fontSize: '0.7rem', opacity: 0.65, marginTop: '0.3rem' }}>{summary.total_average}% avg</p>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Student Information</p>
-            <div className="space-y-2">
+        <div style={{ padding: '2rem 2.5rem' }}>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.75rem' }}>
+            <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '1.25rem' }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
+                Student Information
+              </p>
               {[
-                { label: 'Name', value: student.name },
+                { label: 'Full Name', value: student.name },
                 { label: 'Roll Number', value: student.roll_number },
-                { label: 'Class', value: `Class ${student.class}${student.section ? ` - ${student.section}` : ''}` },
+                { label: 'Class', value: `${student.class}${student.section ? ` — ${student.section}` : ''}` },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between text-sm">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="font-semibold text-slate-800">{value}</span>
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{label}</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b' }}>{value}</span>
                 </div>
               ))}
             </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Parent / Guardian</p>
-            <div className="space-y-2">
+
+            <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '1.25rem' }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
+                Parent / Guardian
+              </p>
               {[
                 { label: 'Name', value: student.parent_name || '—' },
                 { label: 'Phone', value: student.parent_phone || '—' },
                 { label: 'Email', value: student.parent_email || '—' },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between text-sm">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="font-semibold text-slate-800">{value}</span>
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{label}</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', maxWidth: '55%', textAlign: 'right', wordBreak: 'break-all' }}>{value}</span>
                 </div>
               ))}
             </div>
           </div>
-        </div>
 
-        <div className="bg-surface-50 rounded-2xl p-5 mb-8">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Performance Summary</p>
-          <div className="grid grid-cols-4 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.75rem' }}>
             {[
-              { label: 'Overall Grade', value: overallGrade, color: gradeColor(overallGrade) },
-              { label: 'Average Score', value: `${summary.total_average}%`, color: 'text-slate-800' },
-              { label: 'Exams Taken', value: String(summary.total_exams), color: 'text-slate-800' },
-              {
-                label: 'Weak Subjects',
-                value: String(summary.weak_subjects.length),
-                color: summary.weak_subjects.length > 0 ? 'text-red-500' : 'text-green-500',
-              },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="text-center">
-                <p className={`font-display font-bold text-4xl ${color}`}>{value}</p>
-                <p className="text-xs text-slate-400 mt-1">{label}</p>
+              { label: 'Overall Grade', value: overallGrade, valueColor: gradeColor(overallGrade), bg: '#f8fafc' },
+              { label: 'Average Score', value: `${summary.total_average}%`, valueColor: '#1e293b', bg: '#f8fafc' },
+              { label: 'Exams Taken', value: String(summary.total_exams), valueColor: '#1e293b', bg: '#f8fafc' },
+              { label: 'Weak Subjects', value: String(summary.weak_subjects.length), valueColor: summary.weak_subjects.length > 0 ? '#dc2626' : '#16a34a', bg: '#f8fafc' },
+            ].map(({ label, value, valueColor, bg }) => (
+              <div key={label} style={{ background: bg, borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, fontSize: '1.75rem', color: valueColor, lineHeight: 1 }}>{value}</p>
+                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.4rem' }}>{label}</p>
               </div>
             ))}
           </div>
-        </div>
 
-        {summary.weak_subjects.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-            <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-red-700">Areas Requiring Attention</p>
-              <p className="text-xs text-red-500 mt-0.5">
-                Your child is currently scoring below 40% in:{' '}
-                <strong>{summary.weak_subjects.join(', ')}</strong>. Additional support is recommended.
-              </p>
+          {summary.weak_subjects.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '1rem', marginTop: '0.1rem' }}>⚠️</span>
+              <div>
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b91c1c' }}>Areas Requiring Attention</p>
+                <p style={{ fontSize: '0.8rem', color: '#dc2626', marginTop: '0.25rem' }}>
+                  {student.name} is scoring below 40% in: <strong>{summary.weak_subjects.join(', ')}</strong>.
+                  {' '}A student must pass all subjects to receive a passing grade.
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {summary.weak_subjects.length === 0 && performance.length > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-            <CheckCircle size={15} className="text-green-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-green-700">Performing Well</p>
-              <p className="text-xs text-green-600 mt-0.5">
-                Your child is performing above 40% in all subjects. Keep up the great work!
-              </p>
+          {summary.weak_subjects.length === 0 && performance.length > 0 && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '1rem', marginTop: '0.1rem' }}>✅</span>
+              <div>
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>Performing Well</p>
+                <p style={{ fontSize: '0.8rem', color: '#16a34a', marginTop: '0.25rem' }}>
+                  {student.name} is passing all subjects. Keep up the excellent work!
+                </p>
+              </div>
             </div>
+          )}
+
+          <p style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
+            Subject-wise Performance
+          </p>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', overflow: 'hidden', marginBottom: '2rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</th>
+                  {exams.map(e => (
+                    <th key={e} style={{ textAlign: 'center', padding: '0.75rem 0.5rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{e}</th>
+                  ))}
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Average</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Progress</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {performance.map((p: PerformanceRow, idx: number) => {
+                  const pct = parseFloat(p.percentage);
+                  const g = getSubjectGrade(pct);
+                  return (
+                    <tr key={p.subject_name} style={{ borderTop: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{p.subject_name}</td>
+                      {exams.map(examName => {
+                        const entry = report.marks.find(m => m.subject_name === p.subject_name && m.exam_name === examName);
+                        return (
+                          <td key={examName} style={{ textAlign: 'center', padding: '0.75rem 0.5rem', color: '#475569' }}>
+                            {entry ? `${entry.marks_obtained}/${p.max_marks}` : '—'}
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: 'center', padding: '0.75rem 1rem', fontWeight: 600, color: '#334155' }}>
+                        {p.average_marks}/{p.max_marks}
+                      </td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                          <div style={{ width: '60px', height: '6px', background: '#e2e8f0', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: pctBarColor(pct), borderRadius: '9999px' }} />
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', minWidth: '32px' }}>{pct}%</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '0.75rem 1rem' }}>
+                        <span style={{
+                          fontWeight: 700, fontSize: '0.85rem', color: gradeColor(g),
+                          background: g === 'F' ? '#fef2f2' : g === 'C' ? '#fffbeb' : g === 'B' ? '#eff6ff' : '#f0fdf4',
+                          padding: '0.2rem 0.6rem', borderRadius: '0.4rem',
+                        }}>{g}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
 
-        <div className="mb-6">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Subject-wise Performance</p>
-          <table className="w-full text-sm border border-surface-200 rounded-xl overflow-hidden">
-            <thead>
-              <tr className="bg-surface-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Subject</th>
-                {exams.map(e => (
-                  <th key={e} className="text-center px-3 py-3 text-xs font-semibold text-slate-500">{e}</th>
-                ))}
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500">Average</th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500">Grade</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-100">
-              {performance.map((p: PerformanceRow) => {
-                const g = getGrade(parseFloat(p.percentage));
-                return (
-                  <tr key={p.subject_name} className="hover:bg-surface-50">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{p.subject_name}</td>
-                    {exams.map(examName => {
-                      const entry = report.marks.find(
-                        m => m.subject_name === p.subject_name && m.exam_name === examName
-                      );
-                      return (
-                        <td key={examName} className="px-3 py-2.5 text-center text-slate-600">
-                          {entry ? `${entry.marks_obtained}/${p.max_marks}` : '—'}
-                        </td>
-                      );
-                    })}
-                    <td className="px-4 py-2.5 text-center font-semibold text-slate-700">
-                      {p.average_marks}/{p.max_marks}
-                    </td>
-                    <td className={`px-4 py-2.5 text-center font-bold ${gradeColor(g)}`}>{g}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border-t border-surface-200 pt-5 text-center">
-          <p className="text-xs text-slate-400">This report was generated by EduTrack · AI Student Progress Tracker</p>
-          <p className="text-xs text-slate-300 mt-0.5">Powered by Groq llama-3.1-8b-instant</p>
+          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.25rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>This report was generated by EduTrack · AI Student Progress Tracker</p>
+            <p style={{ fontSize: '0.68rem', color: '#cbd5e1', marginTop: '0.2rem' }}>Powered by Groq llama-3.1-8b-instant</p>
+          </div>
         </div>
       </div>
 
       <style>{`
         @media print {
-          body * { visibility: hidden; }
-          #report, #report * { visibility: visible; }
-          #report { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; }
+          body * { visibility: hidden !important; }
+          #report, #report * { visibility: visible !important; }
+          #report {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+          }
         }
       `}</style>
     </div>

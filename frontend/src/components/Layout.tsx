@@ -1,8 +1,10 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList,
-  GraduationCap, School, BookOpen, LucideIcon,
+  GraduationCap, School, BookOpen, LucideIcon, LogOut,
 } from 'lucide-react';
+import { useAuth } from '../pages/context/AuthContext';
+
 
 interface NavItem {
   to: string;
@@ -19,6 +21,14 @@ const navItems: NavItem[] = [
 ];
 
 export default function Layout() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = (): void => {
+    signOut();
+    navigate('/signin');
+  };
+
   return (
     <div className="flex min-h-screen bg-surface-50">
       <aside className="w-60 bg-white border-r border-surface-200 flex flex-col fixed h-full z-10">
@@ -54,11 +64,35 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="px-4 py-4 border-t border-surface-200">
+        <div className="px-4 py-4 border-t border-surface-200 space-y-3">
           <div className="bg-brand-50 rounded-xl p-3">
             <p className="text-xs font-semibold text-brand-700">AI Powered</p>
             <p className="text-xs text-brand-500 mt-0.5">Groq llama-3.1-8b-instant</p>
           </div>
+          {user && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '0.75rem',
+            }}>
+              <div style={{ overflow: 'hidden', flex: 1 }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.name}
+                </p>
+                <p style={{ fontSize: '0.68rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.email}
+                </p>
+              </div>
+              <button
+                onClick={handleSignOut}
+                title="Sign out"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.3rem', color: '#94a3b8', flexShrink: 0, transition: 'color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#94a3b8')}
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

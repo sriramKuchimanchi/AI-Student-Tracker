@@ -88,3 +88,19 @@ export interface ParentReport {
   performance: PerformanceRow[];
   summary: ReportSummary;
 }
+
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  password_hash: string;
+  reset_token: string | null;
+  reset_token_expires: Date | null;
+  created_at: Date;
+}
+
+export interface AuthPayload {
+  userId: number;
+  email: string;
+  name: string;
+}

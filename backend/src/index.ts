@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { testConnection } from './db';
+import { authenticate } from './middleware';
+import authRouter from './routes/auth';
 import studentsRouter from './routes/students';
 import marksRouter from './routes/marks';
 import subjectsRouter from './routes/subjects';
@@ -15,13 +17,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use('/api/students', studentsRouter);
-app.use('/api/marks', marksRouter);
-app.use('/api/subjects', subjectsRouter);
-app.use('/api/exams', examsRouter);
-app.use('/api/classes', classesRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/reports', reportsRouter);
+app.use('/api/auth', authRouter);
+
+app.use('/api/students', authenticate, studentsRouter);
+app.use('/api/marks', authenticate, marksRouter);
+app.use('/api/subjects', authenticate, subjectsRouter);
+app.use('/api/exams', authenticate, examsRouter);
+app.use('/api/classes', authenticate, classesRouter);
+app.use('/api/ai', authenticate, aiRouter);
+app.use('/api/reports', authenticate, reportsRouter);
 
 const PORT = process.env.PORT ?? 5000;
 

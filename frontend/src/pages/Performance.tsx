@@ -7,7 +7,7 @@ import {
   RadialLinearScale, Filler,
 } from 'chart.js';
 import { Bar, Radar } from 'react-chartjs-2';
-import { ArrowLeft, Brain, AlertTriangle, TrendingUp, FileText, Mail, CheckCircle, X } from 'lucide-react';
+import { ArrowLeft, Brain, AlertTriangle, TrendingUp, FileText } from 'lucide-react';
 import api from '../api';
 import { Student, PerformanceRow, MarkWithDetails } from '../types';
 
@@ -17,49 +17,29 @@ ChartJS.register(
   RadialLinearScale, Filler
 );
 
-interface ExamSubjectResult {
-  examName: string;
-  examDate: string | null;
-  subjectName: string;
-  marksObtained: number;
-  maxMarks: number;
-  percentage: number;
-  passed: boolean;
-}
-interface ExamResult {
-  examName: string;
-  examDate: string | null;
-  subjects: ExamSubjectResult[];
-  examPassed: boolean;
-}
+const renderMarkdown = (text: string): string => {
+  return text
+    .replace(/^### (.+)$/gm, '<h3 style="font-size:0.9rem;font-weight:700;color:#1e293b;margin:1.25rem 0 0.4rem;">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 style="font-size:1rem;font-weight:700;color:#1e293b;margin:1.25rem 0 0.5rem;">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin:1rem 0 0.5rem;">$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:600;color:#1e293b;">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^(\d+)\. (.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.3rem 0;"><span style="color:#3d74f5;font-weight:600;min-width:1.2rem;">$1.</span><span>$2</span></div>')
+    .replace(/^- (.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.3rem 0;"><span style="color:#3d74f5;font-weight:700;min-width:1rem;">•</span><span>$1</span></div>')
+    .replace(/\n\n/g, '<div style="height:0.6rem;"></div>')
+    .replace(/\n/g, ' ');
+};
 
-function buildExamResults(marks: MarkWithDetails[]): ExamResult[] {
-  const map = new Map<string, ExamResult>();
-  for (const m of marks) {
-    if (!map.has(m.exam_name)) {
-      map.set(m.exam_name, {
-        examName: m.exam_name,
-        examDate: m.exam_date,
-        subjects: [],
-        examPassed: true,
-      });
-    }
-    const exam = map.get(m.exam_name)!;
-    const pct = (m.marks_obtained / m.max_marks) * 100;
-    const passed = pct >= 40;
-    exam.subjects.push({
-      examName: m.exam_name,
-      examDate: m.exam_date,
-      subjectName: m.subject_name,
-      marksObtained: m.marks_obtained,
-      maxMarks: m.max_marks,
-      percentage: pct,
-      passed,
-    });
-    if (!passed) exam.examPassed = false;
-  }
-  return Array.from(map.values());
-}
+const getOverallGrade = (performance: PerformanceRow[]): string => {
+  if (performance.length === 0) return '—';
+  const hasFailure = performance.some(p => parseFloat(p.percentage) < 40);
+  if (hasFailure) return 'F';
+  const avg = performance.reduce((sum, p) => sum + parseFloat(p.percentage), 0) / performance.length;
+  if (avg >= 85) return 'A+';
+  if (avg >= 70) return 'A';
+  if (avg >= 55) return 'B';
+  return 'C';
+};
 
 export default function Performance() {
   const { studentId } = useParams<{ studentId: string }>();
@@ -70,9 +50,6 @@ export default function Performance() {
   const [suggestions, setSuggestions] = useState<string>('');
   const [loadingAI, setLoadingAI] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const [sendingEmail, setSendingEmail] = useState<boolean>(false);
-  const [emailStatus, setEmailStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [emailMessage, setEmailMessage] = useState<string>('');
 
   useEffect(() => {
     if (!studentId) return;
@@ -103,204 +80,53 @@ export default function Performance() {
     }
   };
 
-  const handleShareEmail = async (): Promise<void> => {
-    if (!student?.parent_email) {
-      setEmailStatus('error');
-      setEmailMessage('No parent email address found for this student.');
-      return;
-    }
-
-    setSendingEmail(true);
-    setEmailStatus('idle');
-    setEmailMessage('');
-
-    try {
-      const examResults = buildExamResults(allMarks);
-      const overallAvgNum =
-        performance.length > 0
-          ? (
-              performance.reduce((sum, p) => sum + parseFloat(p.percentage), 0) /
-              performance.length
-            ).toFixed(1)
-          : '0';
-
-      const weakSubjects = performance
-        .filter(p => parseFloat(p.percentage) < 40)
-        .map(p => p.subject_name);
-
-      const avg = parseFloat(overallAvgNum);
-      let grade = 'A+';
-      if (avg < 40) grade = 'F';
-      else if (avg < 55) grade = 'C';
-      else if (avg < 70) grade = 'B';
-      else if (avg < 85) grade = 'A';
-
-      const subjectRows = performance
-        .map(
-          p =>
-            `• ${p.subject_name}: ${p.average_marks}/${p.max_marks} (${parseFloat(p.percentage).toFixed(1)}%) — ${
-              parseFloat(p.percentage) >= 40 ? 'Pass' : 'FAIL'
-            }`
-        )
-        .join('\n');
-
-      const examSummary = examResults
-        .map(
-          e =>
-            `Exam: ${e.examName}${e.examDate ? ` (${new Date(e.examDate).toLocaleDateString('en-IN')})` : ''} — ${
-              e.examPassed ? 'PASSED' : 'FAILED (one or more subjects below 40%)'
-            }\n` +
-            e.subjects
-              .map(s => `  - ${s.subjectName}: ${s.marksObtained}/${s.maxMarks} (${s.percentage.toFixed(1)}%)`)
-              .join('\n')
-        )
-        .join('\n\n');
-
-      const emailBody = `Dear ${student.parent_name || 'Parent/Guardian'},
-
-We are sharing the academic progress report for your child ${student.name} (Roll No: ${student.roll_number}, Class ${student.class}${student.section ? ' - ' + student.section : ''}).
-
-OVERALL PERFORMANCE SUMMARY
-────────────────────────────
-Overall Average: ${overallAvgNum}%
-Grade: ${grade}
-Exams Taken: ${examResults.length}
-Weak Subjects (below 40%): ${weakSubjects.length > 0 ? weakSubjects.join(', ') : 'None — performing well in all subjects!'}
-
-SUBJECT-WISE AVERAGE PERFORMANCE
-──────────────────────────────────
-${subjectRows}
-
-EXAM-WISE BREAKDOWN
-────────────────────
-${examSummary}
-
-${
-  weakSubjects.length > 0
-    ? `⚠ AREAS REQUIRING ATTENTION\n${student.name} is currently scoring below 40% in: ${weakSubjects.join(', ')}. We strongly recommend additional support and focused study in these areas.\n`
-    : `✓ ${student.name} is performing well in all subjects. Keep up the great work!\n`
-}
-
-Please log in to EduTrack to view the full detailed report and charts.
-
-Warm regards,
-EduTrack — AI Student Progress Tracker`;
-
-      const subject = `Progress Report: ${student.name} — ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`;
-
-      await api.post('/reports/send-email', {
-        to: student.parent_email,
-        subject,
-        body: emailBody,
-        student_id: studentId,
-      });
-
-      setEmailStatus('success');
-      setEmailMessage(`Report sent successfully to ${student.parent_email}`);
-    } catch (err: unknown) {
-      const examResults = buildExamResults(allMarks);
-      const overallAvgNum =
-        performance.length > 0
-          ? (
-              performance.reduce((sum, p) => sum + parseFloat(p.percentage), 0) /
-              performance.length
-            ).toFixed(1)
-          : '0';
-      const weakSubjects = performance
-        .filter(p => parseFloat(p.percentage) < 40)
-        .map(p => p.subject_name);
-      const avg = parseFloat(overallAvgNum);
-      let grade = 'A+';
-      if (avg < 40) grade = 'F';
-      else if (avg < 55) grade = 'C';
-      else if (avg < 70) grade = 'B';
-      else if (avg < 85) grade = 'A';
-
-      const subjectRows = performance
-        .map(p => `• ${p.subject_name}: ${p.average_marks}/${p.max_marks} (${parseFloat(p.percentage).toFixed(1)}%) — ${parseFloat(p.percentage) >= 40 ? 'Pass' : 'FAIL'}`)
-        .join('\n');
-
-      const examSummary = examResults
-        .map(e =>
-          `Exam: ${e.examName}${e.examDate ? ` (${new Date(e.examDate).toLocaleDateString('en-IN')})` : ''} — ${e.examPassed ? 'PASSED' : 'FAILED'}\n` +
-          e.subjects.map(s => `  - ${s.subjectName}: ${s.marksObtained}/${s.maxMarks} (${s.percentage.toFixed(1)}%)`).join('\n')
-        )
-        .join('\n\n');
-
-      const bodyText = `Dear ${student.parent_name || 'Parent/Guardian'},\n\nProgress report for ${student.name} (Roll: ${student.roll_number}, Class ${student.class}${student.section ? '-' + student.section : ''}).\n\nOverall Average: ${overallAvgNum}% | Grade: ${grade}\nWeak Subjects: ${weakSubjects.length > 0 ? weakSubjects.join(', ') : 'None'}\n\nSUBJECT AVERAGES:\n${subjectRows}\n\nEXAM BREAKDOWN:\n${examSummary}\n\nRegards,\nEduTrack`;
-
-      const mailtoUrl = `mailto:${student.parent_email}?subject=${encodeURIComponent(`Progress Report: ${student.name} — ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`)}&body=${encodeURIComponent(bodyText)}`;
-      window.open(mailtoUrl);
-      setEmailStatus('success');
-      setEmailMessage(`Email client opened for ${student.parent_email}. If it didn't open, add a /api/reports/send-email backend route.`);
-    } finally {
-      setSendingEmail(false);
-    }
-  };
-
-  const examResults = buildExamResults(allMarks);
-
   const weakSubjects = performance.filter(p => parseFloat(p.percentage) < 40);
   const overallAvg =
     performance.length > 0
-      ? (
-          performance.reduce((sum, p) => sum + parseFloat(p.percentage), 0) /
-          performance.length
-        ).toFixed(1)
+      ? (performance.reduce((sum, p) => sum + parseFloat(p.percentage), 0) / performance.length).toFixed(1)
       : '0';
+  const overallGrade = getOverallGrade(performance);
 
   const barData = {
     labels: performance.map(p => p.subject_name),
-    datasets: [
-      {
-        label: 'Average %',
-        data: performance.map(p => parseFloat(p.percentage)),
-        backgroundColor: performance.map(p =>
-          parseFloat(p.percentage) < 40
-            ? 'rgba(239,68,68,0.7)'
-            : parseFloat(p.percentage) < 70
-            ? 'rgba(245,158,11,0.7)'
-            : 'rgba(34,197,94,0.7)'
-        ),
-        borderRadius: 8,
-      },
-    ],
+    datasets: [{
+      label: 'Average %',
+      data: performance.map(p => parseFloat(p.percentage)),
+      backgroundColor: performance.map(p =>
+        parseFloat(p.percentage) < 40 ? 'rgba(239,68,68,0.7)' :
+        parseFloat(p.percentage) < 70 ? 'rgba(245,158,11,0.7)' :
+        'rgba(34,197,94,0.7)'
+      ),
+      borderRadius: 8,
+    }],
   };
 
   const barOptions = {
     responsive: true,
     plugins: { legend: { display: false } },
     scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        grid: { color: '#f1f5f9' },
-        ticks: { font: { family: 'DM Sans' } },
-      },
+      y: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' }, ticks: { font: { family: 'DM Sans' } } },
       x: { grid: { display: false }, ticks: { font: { family: 'DM Sans' } } },
     },
   };
 
   const radarData = {
     labels: performance.map(p => p.subject_name),
-    datasets: [
-      {
-        label: 'Performance %',
-        data: performance.map(p => parseFloat(p.percentage)),
-        backgroundColor: 'rgba(61,116,245,0.15)',
-        borderColor: 'rgba(61,116,245,0.8)',
-        pointBackgroundColor: 'rgba(61,116,245,1)',
-        borderWidth: 2,
-      },
-    ],
+    datasets: [{
+      label: 'Performance %',
+      data: performance.map(p => parseFloat(p.percentage)),
+      backgroundColor: 'rgba(61,116,245,0.15)',
+      borderColor: 'rgba(61,116,245,0.8)',
+      pointBackgroundColor: 'rgba(61,116,245,1)',
+      borderWidth: 2,
+    }],
   };
 
   const radarOptions = {
     responsive: true,
     scales: {
       r: {
-        beginAtZero: true,
-        max: 100,
+        beginAtZero: true, max: 100,
         ticks: { stepSize: 25, font: { family: 'DM Sans', size: 10 } },
         pointLabels: { font: { family: 'DM Sans', size: 11 } },
       },
@@ -311,7 +137,7 @@ EduTrack — AI Student Progress Tracker`;
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="spinner" />
       </div>
     );
   }
@@ -326,104 +152,41 @@ EduTrack — AI Student Progress Tracker`;
         <button onClick={() => navigate('/students')} className="btn-secondary py-2 px-3">
           <ArrowLeft size={14} />
         </button>
-        <div className="flex-1">
+        <div style={{ flex: 1 }}>
           <h1 className="page-header">{student.name}</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Class {student.class}{student.section} · Roll {student.roll_number}
+          <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.125rem' }}>
+            Class {student.class}{student.section && ` — ${student.section}`} · Roll {student.roll_number}
           </p>
         </div>
-        {student.parent_email && (
-          <button
-            onClick={handleShareEmail}
-            disabled={sendingEmail}
-            className="btn-secondary"
-          >
-            <Mail size={14} />
-            {sendingEmail ? 'Sending...' : 'Share with Parent'}
-          </button>
-        )}
         <button onClick={() => navigate(`/report/${studentId}`)} className="btn-secondary">
           <FileText size={14} /> Parent Report
         </button>
       </div>
 
-      {emailStatus !== 'idle' && (
-        <div
-          className={`rounded-2xl p-4 mb-6 flex items-start gap-3 ${
-            emailStatus === 'success'
-              ? 'bg-green-50 border border-green-200'
-              : 'bg-red-50 border border-red-200'
-          }`}
-        >
-          {emailStatus === 'success' ? (
-            <CheckCircle size={15} className="text-green-500 shrink-0 mt-0.5" />
-          ) : (
-            <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
-          )}
-          <p className={`text-sm flex-1 ${emailStatus === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-            {emailMessage}
-          </p>
-          <button
-            onClick={() => setEmailStatus('idle')}
-            className="text-slate-400 hover:text-slate-600"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
-      {!student.parent_email && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">
-            No parent email on file. Add one in the Students page to enable email sharing.
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="card p-5">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Overall Average</p>
-          <p className="font-display font-bold text-3xl text-slate-900">{overallAvg}%</p>
-          <div className="w-full h-1.5 bg-surface-200 rounded-full mt-2 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${
-                parseFloat(overallAvg) < 40
-                  ? 'bg-red-400'
-                  : parseFloat(overallAvg) < 70
-                  ? 'bg-amber-400'
-                  : 'bg-green-400'
-              }`}
-              style={{ width: `${overallAvg}%` }}
-            />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+        {[
+          { label: 'Overall Average', value: `${overallAvg}%`, color: '#1e293b' },
+          { label: 'Overall Grade', value: overallGrade, color: overallGrade === 'F' ? '#dc2626' : overallGrade === 'C' ? '#d97706' : overallGrade === 'B' ? '#2563eb' : '#16a34a' },
+          { label: 'Weak Subjects', value: String(weakSubjects.length), color: weakSubjects.length > 0 ? '#dc2626' : '#16a34a' },
+          { label: 'Exams Taken', value: String([...new Set(allMarks.map(m => m.exam_name))].length), color: '#1e293b' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="card p-5">
+            <p style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>{label}</p>
+            <p style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, fontSize: '2rem', color, lineHeight: 1 }}>{value}</p>
           </div>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Weak Subjects</p>
-          <p className="font-display font-bold text-3xl text-red-500">{weakSubjects.length}</p>
-          <p className="text-xs text-slate-400 mt-1">
-            {weakSubjects.length === 0
-              ? 'No weak subjects!'
-              : weakSubjects.map(w => w.subject_name).join(', ')}
-          </p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Exams Taken</p>
-          <p className="font-display font-bold text-3xl text-slate-900">{examResults.length}</p>
-          <p className="text-xs text-slate-400 mt-1">{allMarks.length} total mark entries</p>
-        </div>
+        ))}
       </div>
 
       {weakSubjects.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <div className="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
-            <AlertTriangle size={14} className="text-red-500" />
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '1rem', padding: '1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+          <div style={{ width: '32px', height: '32px', background: '#fee2e2', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <AlertTriangle size={14} color="#ef4444" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-red-700">Weak Subject Alert</p>
-            <p className="text-xs text-red-500 mt-0.5">
-              {student.name} is scoring below 40% in:{' '}
-              <strong>{weakSubjects.map(w => w.subject_name).join(', ')}</strong>. Immediate attention recommended.
+            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#b91c1c' }}>Weak Subject Alert — Grade set to F</p>
+            <p style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem' }}>
+              {student.name} is scoring below 40% in: <strong>{weakSubjects.map(w => w.subject_name).join(', ')}</strong>.
+              A student must pass all subjects to receive a passing grade.
             </p>
           </div>
         </div>
@@ -431,127 +194,55 @@ EduTrack — AI Student Progress Tracker`;
 
       {performance.length === 0 ? (
         <div className="card p-12 text-center">
-          <p className="text-slate-400 text-sm">
-            No marks data yet. Go to Marks Entry to add marks for this student.
-          </p>
+          <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>No marks data yet. Go to Marks Entry to add marks for this student.</p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-6 mb-6">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
             <div className="card p-6">
-              <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <TrendingUp size={15} className="text-slate-400" /> Subject-wise Performance (Average)
+              <h3 style={{ fontWeight: 600, color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={15} color="#94a3b8" /> Subject-wise Performance
               </h3>
               <Bar data={barData} options={barOptions} />
             </div>
             <div className="card p-6">
-              <h3 className="font-semibold text-slate-800 mb-4">Performance Radar</h3>
+              <h3 style={{ fontWeight: 600, color: '#1e293b', marginBottom: '1rem' }}>Performance Radar</h3>
               <Radar data={radarData} options={radarOptions} />
             </div>
           </div>
 
           <div className="card overflow-hidden mb-6">
-            <div className="px-6 py-4 border-b border-surface-200 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">Exam-wise Result</h3>
-              <span className="text-xs text-slate-400">
-                An exam is PASSED only when ALL subjects ≥ 40%
-              </span>
-            </div>
-            <div className="divide-y divide-surface-100">
-              {examResults.map(exam => (
-                <div key={exam.examName} className="px-6 py-4">
-
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">{exam.examName}</p>
-                      {exam.examDate && (
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {new Date(exam.examDate).toLocaleDateString('en-IN', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                          })}
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`text-xs font-bold px-3 py-1 rounded-full ${
-                        exam.examPassed
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {exam.examPassed ? '✓ PASSED' : '✗ FAILED'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                    {exam.subjects.map(subj => (
-                      <div
-                        key={subj.subjectName}
-                        className={`rounded-xl px-3 py-2.5 border ${
-                          subj.passed
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-red-50 border-red-200'
-                        }`}
-                      >
-                        <p className="text-xs font-semibold text-slate-600 truncate">{subj.subjectName}</p>
-                        <p className={`text-sm font-bold mt-0.5 ${subj.passed ? 'text-green-700' : 'text-red-700'}`}>
-                          {subj.marksObtained}/{subj.maxMarks}
-                          <span className="text-xs font-medium ml-1">({subj.percentage.toFixed(0)}%)</span>
-                        </p>
-                        <p className={`text-xs mt-0.5 ${subj.passed ? 'text-green-600' : 'text-red-600'}`}>
-                          {subj.passed ? 'Pass' : 'Fail'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card overflow-hidden mb-6">
-            <div className="px-6 py-4 border-b border-surface-200">
-              <h3 className="font-semibold text-slate-800">Subject-wise Average Breakdown</h3>
+            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
+              <h3 style={{ fontWeight: 600, color: '#1e293b' }}>Subject-wise Breakdown</h3>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-surface-50 border-b border-surface-200">
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Subject</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Avg Marks</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Avg Percentage</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Exams</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Overall Status</th>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['Subject', 'Avg Marks', 'Percentage', 'Exams', 'Status'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '0.75rem 1.5rem', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-100">
+              <tbody>
                 {performance.map(p => {
                   const pct = parseFloat(p.percentage);
                   return (
-                    <tr key={p.subject_name} className="hover:bg-surface-50 transition-colors">
-                      <td className="px-6 py-3 font-medium text-slate-800">{p.subject_name}</td>
-                      <td className="px-6 py-3 text-slate-500">{p.average_marks}/{p.max_marks}</td>
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-1.5 bg-surface-200 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                pct < 40 ? 'bg-red-400' : pct < 70 ? 'bg-amber-400' : 'bg-green-400'
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            />
+                    <tr key={p.subject_name} style={{ borderTop: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.75rem 1.5rem', fontWeight: 500, color: '#1e293b' }}>{p.subject_name}</td>
+                      <td style={{ padding: '0.75rem 1.5rem', color: '#64748b' }}>{p.average_marks}/{p.max_marks}</td>
+                      <td style={{ padding: '0.75rem 1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ width: '80px', height: '6px', background: '#e2e8f0', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', borderRadius: '9999px', background: pct < 40 ? '#f87171' : pct < 70 ? '#fbbf24' : '#4ade80' }} />
                           </div>
-                          <span className="text-xs text-slate-600">{pct.toFixed(1)}%</span>
+                          <span style={{ fontSize: '0.75rem', color: '#475569' }}>{pct}%</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-slate-500">{p.exam_count}</td>
-                      <td className="px-6 py-3">
-                        {pct < 40 ? (
-                          <span className="badge-weak">Weak</span>
-                        ) : pct < 70 ? (
-                          <span className="badge-ok">Average</span>
-                        ) : (
-                          <span className="badge-good">Good</span>
-                        )}
+                      <td style={{ padding: '0.75rem 1.5rem', color: '#64748b' }}>{p.exam_count}</td>
+                      <td style={{ padding: '0.75rem 1.5rem' }}>
+                        {pct < 40 ? <span className="badge-weak">Weak</span> :
+                         pct < 70 ? <span className="badge-ok">Average</span> :
+                         <span className="badge-good">Good</span>}
                       </td>
                     </tr>
                   );
@@ -560,15 +251,14 @@ EduTrack — AI Student Progress Tracker`;
             </table>
           </div>
 
-          {/* AI Suggestions */}
           <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-brand-100 rounded-lg flex items-center justify-center">
-                  <Brain size={13} className="text-brand-600" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: '28px', height: '28px', background: '#dce6ff', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Brain size={13} color="#3d74f5" />
                 </div>
-                <h3 className="font-semibold text-slate-800">AI Improvement Suggestions</h3>
-                <span className="text-xs bg-brand-50 text-brand-500 px-2 py-0.5 rounded-full font-medium">
+                <h3 style={{ fontWeight: 600, color: '#1e293b' }}>AI Improvement Suggestions</h3>
+                <span style={{ fontSize: '0.7rem', background: '#f0f4ff', color: '#3d74f5', padding: '0.15rem 0.5rem', borderRadius: '9999px', fontWeight: 500 }}>
                   Groq AI
                 </span>
               </div>
@@ -579,21 +269,21 @@ EduTrack — AI Student Progress Tracker`;
             </div>
 
             {loadingAI && (
-              <div className="flex items-center gap-3 py-6 text-slate-500">
-                <div className="w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                <span className="text-sm">AI is analyzing {student.name}'s performance...</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1.5rem 0', color: '#64748b' }}>
+                <div style={{ width: '20px', height: '20px', border: '2px solid #6b9aff', borderTopColor: 'transparent', borderRadius: '9999px', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.875rem' }}>AI is analysing {student.name}'s performance...</span>
               </div>
             )}
 
             {suggestions && !loadingAI && (
-              <div className="bg-surface-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {suggestions}
-              </div>
+              <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', fontSize: '0.875rem', color: '#334155', lineHeight: 1.7, border: '1px solid #e2e8f0' }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestions) }}
+              />
             )}
 
             {!suggestions && !loadingAI && (
-              <p className="text-slate-400 text-sm text-center py-6">
-                Click "Generate Suggestions" to get personalized AI-powered study recommendations.
+              <p style={{ color: '#94a3b8', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+                Click "Generate Suggestions" to get personalised AI-powered study recommendations.
               </p>
             )}
           </div>
